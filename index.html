@@ -89,15 +89,20 @@ textarea{width:100%;min-height:140px;font:13px/1.5 ui-monospace,Menlo,monospace;
 input[type=text],input[type=number]{font:inherit;font-size:18px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);width:100%}
 .note{color:var(--muted);font-size:14px;margin:0;line-height:1.6}
 .confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.pick{display:inline-flex;align-items:center;justify-content:center;padding:14px 18px;border-radius:12px;background:var(--accent);color:var(--accent-ink);font-weight:700;cursor:pointer}
+.chip{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;background:var(--bg);border:1px solid var(--line);color:var(--muted)}
+tr.subtotal td{font-weight:700;background:var(--bg)}
 </style>
 </head>
 <body>
 
 <header>
-  <h1>屋台レジ</h1>
+  <h1>屋台レジ</h1><span class="chip" id="devchip" hidden></span>
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" aria-selected="true" data-view="pos">会計</button>
     <button class="tab" role="tab" aria-selected="false" data-view="sum">集計</button>
+    <button class="tab" role="tab" aria-selected="false" data-view="mrg">合算</button>
     <button class="tab" role="tab" aria-selected="false" data-view="set">設定</button>
   </div>
 </header>
@@ -147,7 +152,49 @@ input[type=text],input[type=number]{font:inherit;font-size:18px;padding:10px 12p
   </div>
 </section>
 
+<section class="view stack" id="v-mrg" hidden>
+  <div class="card">
+    <span class="label">複数日・複数台の合算</span>
+    <p class="note">各iPadで書き出したCSVを、まとめて選んでください。同じファイルを2回読み込んでも、二重には数えません。読み込んだ内容はこの画面を閉じると消えます（元のCSVはそのまま残ります）。</p>
+    <div class="actions">
+      <label class="pick" for="files">CSVファイルを選ぶ</label>
+      <input type="file" id="files" class="vh" accept=".csv,text/csv,text/plain" multiple>
+      <button class="ghost" id="mclear">読み込みをクリア</button>
+    </div>
+    <div class="scroll"><table id="m-files"></table></div>
+  </div>
+  <div class="card">
+    <div class="stats">
+      <div class="stat"><span class="label">売上合計</span><b class="yen" id="m-total">0</b></div>
+      <div class="stat"><span class="label">現金売上</span><b class="yen" id="m-cash">0</b></div>
+      <div class="stat"><span class="label">金券回収</span><b id="m-tix" style="font-size:20px">—</b></div>
+      <div class="stat"><span class="label">会計数</span><b id="m-count">0件</b></div>
+    </div>
+  </div>
+  <div class="card">
+    <span class="label">日別・端末別</span>
+    <div class="scroll"><table id="m-days"></table></div>
+  </div>
+  <div class="card">
+    <span class="label">商品別</span>
+    <div class="scroll"><table id="m-items"></table></div>
+  </div>
+  <div class="card">
+    <span class="label">合算結果の書き出し（CSV）</span>
+    <div class="actions">
+      <button class="ghost" id="mdl">合算CSVを保存</button>
+      <button class="ghost" id="mcopy">合算CSVをコピー</button>
+    </div>
+    <textarea id="mcsv" readonly aria-label="合算CSVの内容"></textarea>
+  </div>
+</section>
+
 <section class="view stack" id="v-set" hidden>
+  <div class="card">
+    <span class="label">この端末の名前</span>
+    <p class="note">複数のiPadを使うときは、それぞれ別の名前を付けてください（例：iPadA）。CSVのファイル名と中身に入ります。</p>
+    <div class="field"><input type="text" id="devname" placeholder="iPadA" aria-label="この端末の名前"><button class="ghost" id="savedev">名前を保存</button></div>
+  </div>
   <div class="card">
     <span class="label">商品と値段</span>
     <div id="editor" class="stack" style="gap:10px"></div>
@@ -216,7 +263,7 @@ function renderPanel(){
   const qs=[["ぴったり",c.due,"exact"],["1000",1000],["5000",5000],["10000",10000],["+100",100,"add"],["+500",500,"add"],["クリア",0,"clear"]];
   $("quick").innerHTML=qs.map(([l,v,k])=>`<button class="qb ${k==="exact"?"exact":k==="clear"?"clear":""}" data-q="${v}" data-k="${k||"set"}">${l}</button>`).join("");
 }
-function render(){renderProducts();renderPanel()}
+function render(){renderProducts();renderPanel();const c=$("devchip");c.textContent=S.device||"";c.hidden=!S.device}
 
 document.addEventListener("click",e=>{
   const b=e.target.closest("button");if(!b)return;
@@ -226,8 +273,8 @@ document.addEventListener("click",e=>{
   else if(b.dataset.tm){const v=b.dataset.tm;if(tickets[v]>0)tickets[v]--;renderPanel()}
   else if(b.dataset.q!==undefined){const v=+b.dataset.q,k=b.dataset.k;recv=k==="add"?recv+v:k==="clear"?0:v;renderPanel()}
   else if(b.dataset.view){document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected",t===b));
-    ["pos","sum","set"].forEach(v=>$("v-"+v).hidden=v!==b.dataset.view);
-    if(b.dataset.view==="sum")renderSum();if(b.dataset.view==="set")renderEditor();}
+    ["pos","sum","mrg","set"].forEach(v=>$("v-"+v).hidden=v!==b.dataset.view);
+    if(b.dataset.view==="sum")renderSum();if(b.dataset.view==="set")renderEditor();if(b.dataset.view==="mrg")renderMerge();}
 });
 $("clearorder").onclick=()=>{order=order.map(()=>0);tickets=emptyT();recv=0;render()};
 $("checkout").onclick=()=>{
@@ -255,24 +302,114 @@ function renderSum(){
 }
 function buildCSV(){
   const q=v=>/[",\n]/.test(v)?`"${String(v).replace(/"/g,'""')}"`:v;
-  const L=["日時,商品,数量,単価,小計,会計合計,"+TICKETS.map(v=>v+"円券").join(",")+",現金売上"];
-  S.sales.forEach(x=>{const d=new Date(x.t).toLocaleString("ja-JP");x.items.forEach((it,k)=>L.push([d,q(it.name),it.q,it.price,it.q*it.price,k?"":x.total,...TICKETS.map(v=>k?"":(x.tickets[v]||0)),k?"":x.cash].join(",")))});
+  const L=["会計ID,日時,端末,商品,数量,単価,小計,会計合計,"+TICKETS.map(v=>v+"円券").join(",")+",現金売上"];
+  const dev=q(devName());
+  S.sales.forEach(x=>{const d=new Date(x.t).toLocaleString("ja-JP");x.items.forEach((it,k)=>L.push([x.t,d,dev,q(it.name),it.q,it.price,it.q*it.price,k?"":x.total,...TICKETS.map(v=>k?"":(x.tickets[v]||0)),k?"":x.cash].join(",")))});
   const tot=S.sales.reduce((a,x)=>a+x.total,0),cash=S.sales.reduce((a,x)=>a+x.cash,0);
   L.push("",`売上合計,${tot}`,`現金売上,${cash}`,...TICKETS.map(v=>`${v}円券,${tcount(S.sales,v)}枚`),`金券額面合計,${TICKETS.reduce((a,v)=>a+v*tcount(S.sales,v),0)}`);
   return L.join("\n");
 }
 $("undo").onclick=()=>{if(!S.sales.length)return;S.sales.pop();save();renderSum();toast("最後の会計を取り消しました")};
-$("dl").onclick=()=>{
-  try{const blob=new Blob(["﻿"+buildCSV()],{type:"text/csv"}),a=document.createElement("a"),d=new Date();
-    a.href=URL.createObjectURL(blob);a.download=`売上_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}.csv`;
+function devName(){return (S.device||"").trim()||"端末"}
+function ymd(d){return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`}
+function saveFile(name,text){
+  try{const blob=new Blob(["\ufeff"+text],{type:"text/csv"}),a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);a.download=name.replace(/[\\/:*?"<>|]/g,"_");
     document.body.appendChild(a);a.click();a.remove();toast("保存を開始しました");}
   catch(e){toast("保存できない環境です。コピーを使ってください")}
-};
-$("copy").onclick=()=>{const t=$("csv");
-  navigator.clipboard?.writeText(t.value).then(()=>toast("コピーしました")).catch(()=>{t.select();toast("選択しました。長押しでコピーしてください")})
-  ?? (t.select(),toast("選択しました。長押しでコピーしてください"));};
+}
+function copyText(t){
+  const fb=()=>{t.select();toast("選択しました。長押しでコピーしてください")};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t.value).then(()=>toast("コピーしました")).catch(fb)}else fb();
+}
+$("dl").onclick=()=>saveFile(`売上_${ymd(new Date())}_${devName()}.csv`,buildCSV());
+$("copy").onclick=()=>copyText($("csv"));
+$("savedev").onclick=()=>{S.device=$("devname").value.trim();save();render();toast(S.device?`端末名を「${S.device}」にしました`:"端末名を消しました")};
+
+/* ---------- 合算 ---------- */
+let M={files:[],sales:new Map()};
+function parseCSV(text){
+  text=text.replace(/^\ufeff/,"");const rows=[];let row=[],f="",i=0,qd=false;
+  for(;i<text.length;i++){const c=text[i];
+    if(qd){if(c==='"'){if(text[i+1]==='"'){f+='"';i++}else qd=false}else f+=c}
+    else if(c==='"')qd=true;
+    else if(c===","){row.push(f);f=""}
+    else if(c==="\n"||c==="\r"){if(c==="\r"&&text[i+1]==="\n")i++;row.push(f);rows.push(row);row=[];f=""}
+    else f+=c}
+  if(f!==""||row.length){row.push(f);rows.push(row)}
+  return rows;
+}
+function readSales(text,fname){
+  const rows=parseCSV(text);const h=rows[0]||[];const ix=n=>h.indexOf(n);
+  if(ix("商品")<0||ix("数量")<0||ix("会計合計")<0)throw new Error("屋台レジのCSVではありません");
+  const out=[];let cur=null,n=0;
+  for(const r of rows.slice(1)){
+    const qty=r[ix("数量")];if(!r[ix("商品")]||qty===undefined||qty===""||isNaN(+qty))continue;
+    const num=k=>{const j=ix(k);return j<0?0:(+r[j]||0)};
+    if(r[ix("会計合計")]!==""){
+      n++;const id=ix("会計ID")>=0&&r[ix("会計ID")]?r[ix("会計ID")]:`${fname}#${n}`;
+      const t=ix("会計ID")>=0&&+r[ix("会計ID")]?+r[ix("会計ID")]:Date.parse(r[ix("日時")])||0;
+      const dev=ix("端末")>=0&&r[ix("端末")]?r[ix("端末")]:fname.replace(/\.csv$/i,"");
+      cur={key:dev+"|"+id,t,dev,items:[],total:num("会計合計"),cash:num("現金売上"),tickets:Object.fromEntries(TICKETS.map(v=>[v,num(v+"円券")]))};
+      out.push(cur);
+    }
+    if(cur)cur.items.push({name:r[ix("商品")],q:+qty,price:num("単価")});
+  }
+  return out;
+}
+$("files").addEventListener("change",async e=>{
+  const fs=[...e.target.files];let added=0,dup=0,bad=[];
+  for(const f of fs){
+    try{const list=readSales(await f.text(),f.name);let a=0,d=0;
+      list.forEach(x=>{if(M.sales.has(x.key))d++;else{M.sales.set(x.key,x);a++}});
+      M.files.push({name:f.name,count:list.length,added:a,dup:d,total:list.reduce((s,x)=>s+x.total,0)});added+=a;dup+=d;}
+    catch(err){bad.push(f.name)}
+  }
+  e.target.value="";renderMerge();
+  toast(bad.length?`読み込めないファイルがあります：${bad.join("、")}`:dup?`${added}件追加（重複${dup}件は除外）`:`${added}件の会計を読み込みました`);
+});
+$("mclear").onclick=()=>{M={files:[],sales:new Map()};renderMerge();toast("読み込みをクリアしました")};
+function dayKey(t){if(!t)return "日付不明";const d=new Date(t);return `${d.getMonth()+1}/${d.getDate()}（${"日月火水木金土"[d.getDay()]}）`}
+function agg(list){return{n:list.length,total:list.reduce((a,x)=>a+x.total,0),cash:list.reduce((a,x)=>a+x.cash,0),tix:Object.fromEntries(TICKETS.map(v=>[v,tcount(list,v)]))}}
+function mergeGroups(){
+  const all=[...M.sales.values()].sort((a,b)=>a.t-b.t);const days=new Map();
+  all.forEach(x=>{const d=dayKey(x.t);if(!days.has(d))days.set(d,new Map());const g=days.get(d);if(!g.has(x.dev))g.set(x.dev,[]);g.get(x.dev).push(x)});
+  return{all,days};
+}
+function renderMerge(){
+  const {all,days}=mergeGroups(),A=agg(all);
+  $("m-files").innerHTML=M.files.length?`<tr><th>ファイル</th><th class="n">会計数</th><th class="n">売上</th><th>状態</th></tr>`+
+    M.files.map(f=>`<tr><td>${esc(f.name)}</td><td class="n">${f.count}</td><td class="n">${yen(f.total)}円</td><td>${f.dup?`<span class="chip">重複${f.dup}件除外</span>`:`<span class="chip">OK</span>`}</td></tr>`).join("")
+    :`<tr><td class="note">まだ読み込んでいません。「CSVファイルを選ぶ」から、3日分・全台分のCSVをまとめて選べます。</td></tr>`;
+  $("m-total").textContent=yen(A.total);$("m-cash").textContent=yen(A.cash);$("m-count").textContent=A.n+"件";
+  $("m-tix").textContent=TICKETS.map(v=>`${v}円×${A.tix[v]}`).join("　");
+  const th=`<tr><th>日付</th><th>端末</th><th class="n">会計数</th><th class="n">売上</th><th class="n">現金</th>${TICKETS.map(v=>`<th class="n">${v}円券</th>`).join("")}</tr>`;
+  const line=(d,dev,g,cls="")=>`<tr class="${cls}"><td>${d}</td><td>${esc(dev)}</td><td class="n">${g.n}</td><td class="n">${yen(g.total)}</td><td class="n">${yen(g.cash)}</td>${TICKETS.map(v=>`<td class="n">${g.tix[v]}</td>`).join("")}</tr>`;
+  let body="";days.forEach((g,d)=>{const lists=[...g.values()];g.forEach((l,dev)=>body+=line(d,dev,agg(l)));if(g.size>1)body+=line(d,"日計",agg(lists.flat()),"subtotal")});
+  if(all.length)body+=line("合計","全端末",A,"subtotal");
+  $("m-days").innerHTML=th+(body||`<tr><td colspan="${5+TICKETS.length}" class="note">CSVを読み込むと、日ごと・端末ごとの売上が並びます。</td></tr>`);
+  const per=new Map();all.forEach(x=>x.items.forEach(it=>{const p=per.get(it.name)||{q:0,a:0};p.q+=it.q;p.a+=it.q*it.price;per.set(it.name,p)}));
+  $("m-items").innerHTML=`<tr><th>商品</th><th class="n">数量</th><th class="n">金額</th></tr>`+
+    ([...per].map(([n,v])=>`<tr><td>${esc(n)}</td><td class="n">${v.q}</td><td class="n">${yen(v.a)}円</td></tr>`).join("")||`<tr><td colspan="3" class="note">—</td></tr>`);
+  $("mcsv").value=buildMergeCSV();
+}
+function buildMergeCSV(){
+  const {all,days}=mergeGroups(),q=v=>/[",\n]/.test(v)?`"${String(v).replace(/"/g,'""')}"`:v;
+  const L=["日付,端末,会計数,売上,現金売上,"+TICKETS.map(v=>v+"円券").join(",")];
+  const line=(d,dev,g)=>L.push([d,q(dev),g.n,g.total,g.cash,...TICKETS.map(v=>g.tix[v])].join(","));
+  days.forEach((g,d)=>{g.forEach((l,dev)=>line(d,dev,agg(l)));if(g.size>1)line(d,"日計",agg([...g.values()].flat()))});
+  const A=agg(all);line("合計","全端末",A);
+  L.push("","商品,数量,金額");
+  const per=new Map();all.forEach(x=>x.items.forEach(it=>{const p=per.get(it.name)||{q:0,a:0};p.q+=it.q;p.a+=it.q*it.price;per.set(it.name,p)}));
+  per.forEach((v,n)=>L.push([q(n),v.q,v.a].join(",")));
+  L.push("",`金券額面合計,${TICKETS.reduce((a,v)=>a+v*A.tix[v],0)}`);
+  return L.join("\n");
+}
+$("mdl").onclick=()=>{if(!M.sales.size){toast("先にCSVを読み込んでください");return}saveFile(`売上合算_${ymd(new Date())}.csv`,buildMergeCSV())};
+$("mcopy").onclick=()=>copyText($("mcsv"));
 
 function renderEditor(){
+  $("devname").value=S.device||"";
   $("editor").innerHTML=S.products.map((p,i)=>`<div class="field">
     <input type="text" id="pn${i}" value="${esc(p.name)}" aria-label="商品${i+1}の名前">
     <input type="number" id="pp${i}" value="${p.price}" min="0" step="10" inputmode="numeric" aria-label="商品${i+1}の値段">
