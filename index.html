@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="屋台レジ">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#18233a">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>屋台レジ</title>
+<style>
+html{-webkit-text-size-adjust:100%}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+/* Layout: iPad landscape split — product pad on the left, order + payment on the right; stacks on narrow screens */
+:root{
+  --bg:#eef1f4; --surface:#ffffff; --ink:#18233a; --muted:#5d6a80; --line:#d6dce5;
+  --accent:#2747c9; --accent-ink:#ffffff; --ticket:#0f8a6a; --ticket-soft:#dcf3ea; --warn:#b4471e; --warn-soft:#fbe7dd;
+  --font:"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#10141d; --surface:#1a2030; --ink:#e8ecf4; --muted:#9aa5ba; --line:#2c3447;
+  --accent:#7d95ff; --accent-ink:#0c1020; --ticket:#4fd1a8; --ticket-soft:#173a30; --warn:#ff9a70; --warn-soft:#3d2318; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#10141d; --surface:#1a2030; --ink:#e8ecf4; --muted:#9aa5ba; --line:#2c3447;
+  --accent:#7d95ff; --accent-ink:#0c1020; --ticket:#4fd1a8; --ticket-soft:#173a30; --warn:#ff9a70; --warn-soft:#3d2318; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:16px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 24px;
+  -webkit-tap-highlight-color:transparent;font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;touch-action:manipulation}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+h1{font-size:22px;margin:0;letter-spacing:.04em}
+.tabs{display:flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px;margin-left:auto}
+.tab{padding:10px 16px;border-radius:9px;font-weight:600;color:var(--muted)}
+.tab[aria-selected="true"]{background:var(--ink);color:var(--bg)}
+.view[hidden]{display:none!important}
+.pos{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px}
+@media (max-width:760px){.pos{grid-template-columns:1fr}}
+.products{display:grid;gap:10px}
+.prod{display:grid;grid-template-columns:1fr auto;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px}
+.prod-add{text-align:left;display:flex;flex-direction:column;gap:2px;padding:10px 6px;border-radius:12px;min-height:68px;justify-content:center}
+.prod-add:active{background:var(--bg)}
+.prod-name{font-size:21px;font-weight:700}
+.prod-price{color:var(--muted);font-size:17px}
+.stepper{display:flex;align-items:center;gap:8px}
+.step{width:56px;height:56px;border-radius:14px;border:1px solid var(--line);font-size:28px;font-weight:600}
+.step.plus{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.qty{min-width:44px;text-align:center;font-size:28px;font-weight:700}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px;align-self:start}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.label{color:var(--muted);font-size:14px;letter-spacing:.06em}
+.total{font-size:44px;font-weight:800;line-height:1}
+.yen::before{content:"¥";font-size:.6em;margin-right:2px;font-weight:600}
+.box{border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.ticketbox{background:var(--ticket-soft)}
+.ticketbox .label{color:var(--ticket)}
+.tstep{width:52px;height:52px;border-radius:12px;background:var(--surface);border:1px solid var(--line);font-size:26px;font-weight:600}
+.cashbox{border:1px solid var(--line)}
+.quick{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.qb{padding:12px 4px;border-radius:10px;border:1px solid var(--line);font-weight:600;font-size:15px}
+.qb.exact{grid-column:span 2;background:var(--bg)}
+.qb.clear{grid-column:span 2;color:var(--muted)}
+.recv{font-size:28px;font-weight:700}
+.change{font-size:32px;font-weight:800}
+.msg{font-size:14px;padding:8px 10px;border-radius:8px;background:var(--warn-soft);color:var(--warn)}
+.big{width:100%;padding:18px;border-radius:14px;background:var(--ink);color:var(--bg);font-size:20px;font-weight:700}
+.big:disabled{opacity:.35;cursor:not-allowed}
+.ghost{padding:10px 14px;border-radius:10px;border:1px solid var(--line);font-weight:600}
+.danger{color:var(--warn);border-color:var(--warn)}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:12px 20px;border-radius:999px;font-weight:600;z-index:20}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.stat{display:flex;flex-direction:column;gap:4px}
+.stat b{font-size:30px}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:600;font-size:13px}
+td.n,th.n{text-align:right}
+.scroll{overflow-x:auto}
+.stack{display:flex;flex-direction:column;gap:16px}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+textarea{width:100%;min-height:140px;font:13px/1.5 ui-monospace,Menlo,monospace;border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--bg);color:var(--ink)}
+.field{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:8px}
+input[type=text],input[type=number]{font:inherit;font-size:18px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);width:100%}
+.note{color:var(--muted);font-size:14px;margin:0;line-height:1.6}
+.confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>屋台レジ</h1>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-view="pos">会計</button>
+    <button class="tab" role="tab" aria-selected="false" data-view="sum">集計</button>
+    <button class="tab" role="tab" aria-selected="false" data-view="set">設定</button>
+  </div>
+</header>
+
+<section class="view pos" id="v-pos">
+  <div class="products" id="products"></div>
+  <div class="panel">
+    <div class="row"><span class="label">合計</span><span class="total yen" id="total">0</span></div>
+    <div class="box ticketbox">
+      <div class="row"><span class="label">金券</span><span id="tval" class="yen">0</span></div>
+      <div id="tickets" class="stack" style="gap:8px"></div>
+    </div>
+    <div class="box cashbox">
+      <div class="row"><span class="label">現金でもらう額</span><span class="yen" id="due">0</span></div>
+      <div class="row"><span class="label">預かり</span><span class="recv yen" id="recv">0</span></div>
+      <div class="quick" id="quick"></div>
+      <div class="row"><span class="label">おつり</span><span class="change yen" id="change">0</span></div>
+    </div>
+    <div class="msg" id="msg" hidden></div>
+    <button class="big" id="checkout" disabled>会計を確定</button>
+    <button class="ghost" id="clearorder">注文をクリア</button>
+  </div>
+</section>
+
+<section class="view stack" id="v-sum" hidden>
+  <div class="card">
+    <div class="stats">
+      <div class="stat"><span class="label">売上合計</span><b class="yen" id="s-total">0</b></div>
+      <div class="stat"><span class="label">現金売上（レジ内）</span><b class="yen" id="s-cash">0</b></div>
+      <div class="stat"><span class="label">金券回収</span><b id="s-tix" style="font-size:20px">—</b></div>
+      <div class="stat"><span class="label">会計数</span><b id="s-count">0件</b></div>
+    </div>
+    <div class="scroll"><table id="s-items"></table></div>
+  </div>
+  <div class="card">
+    <div class="row"><span class="label">会計履歴（新しい順）</span><button class="ghost" id="undo">最後の会計を取り消す</button></div>
+    <div class="scroll"><table id="s-hist"></table></div>
+  </div>
+  <div class="card">
+    <span class="label">書き出し（CSV）</span>
+    <p class="note">ファイルに保存するか、コピーしてメモやスプレッドシートに貼り付けられます。ネット接続は不要です。</p>
+    <div class="actions">
+      <button class="ghost" id="dl">CSVファイルを保存</button>
+      <button class="ghost" id="copy">CSVをコピー</button>
+    </div>
+    <textarea id="csv" readonly aria-label="CSVの内容"></textarea>
+  </div>
+</section>
+
+<section class="view stack" id="v-set" hidden>
+  <div class="card">
+    <span class="label">商品と値段</span>
+    <div id="editor" class="stack" style="gap:10px"></div>
+    <button class="ghost" id="saveprod">商品を保存</button>
+  </div>
+  <div class="card">
+    <span class="label">1日の終わり</span>
+    <p class="note">書き出しを済ませてから、売上データをすべて消去します。商品設定は残ります。</p>
+    <div class="confirm" id="resetwrap"><button class="ghost danger" id="reset">売上データを消去</button></div>
+  </div>
+</section>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const TICKETS=[500,1000], KEY="yatai-register-v2";
+const store={get(){try{return JSON.parse(localStorage.getItem(KEY))}catch(e){return null}},set(v){try{localStorage.setItem(KEY,JSON.stringify(v))}catch(e){}}};
+let S=store.get()||{products:[
+  {name:"揚げたこ焼き（6ヶ）",price:400},{name:"ロシアンたこ焼き",price:450},{name:"たこ焼き＋ドリンクセット",price:500},
+  {name:"レモネード",price:120},{name:"麦茶",price:120}],sales:[]};
+const emptyT=()=>Object.fromEntries(TICKETS.map(v=>[v,0]));
+let order=S.products.map(()=>0), tickets=emptyT(), recv=0;
+const tsum=t=>TICKETS.reduce((s,v)=>s+v*(t[v]||0),0);
+const $=id=>document.getElementById(id), yen=n=>n.toLocaleString("ja-JP");
+const save=()=>store.set(S);
+
+function toast(t){const el=$("toast");el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,1800)}
+
+function renderProducts(){
+  $("products").innerHTML=S.products.map((p,i)=>`
+    <div class="prod">
+      <button class="prod-add" data-add="${i}"><span class="prod-name">${esc(p.name)}</span><span class="prod-price yen">${yen(p.price)}</span></button>
+      <div class="stepper">
+        <button class="step" data-sub="${i}" aria-label="${esc(p.name)}を減らす">−</button>
+        <span class="qty">${order[i]}</span>
+        <button class="step plus" data-add="${i}" aria-label="${esc(p.name)}を増やす">＋</button>
+      </div>
+    </div>`).join("");
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+
+function calc(){
+  const total=order.reduce((s,q,i)=>s+q*S.products[i].price,0);
+  const tv=tsum(tickets), due=Math.max(0,total-tv), change=recv-due;
+  // A ticket is unnecessary if the order is still covered without it
+  const extra=TICKETS.some(v=>tickets[v]>0&&tv-v>=total);
+  return{total,tv,due,change,extra};
+}
+function renderPanel(){
+  const c=calc();
+  $("total").textContent=yen(c.total);$("tval").textContent=yen(c.tv);
+  $("tickets").innerHTML=TICKETS.map(v=>`<div class="row" style="align-items:center">
+    <span style="font-weight:700">${yen(v)}円券</span>
+    <div class="stepper"><button class="tstep" data-tm="${v}" aria-label="${v}円券を減らす">−</button>
+    <span class="qty">${tickets[v]}枚</span>
+    <button class="tstep" data-tp="${v}" aria-label="${v}円券を増やす">＋</button></div></div>`).join("");
+  $("due").textContent=yen(c.due);$("recv").textContent=yen(recv);
+  $("change").textContent=c.due===0&&recv===0?"0":(c.change>=0?yen(c.change):"不足 "+yen(-c.change));
+  let m="";
+  if(c.total>0&&c.extra) m=`金券が多すぎます。1枚減らしても足ります`;
+  else if(c.total>0&&c.tv>c.total) m=`金券が ${yen(c.tv-c.total)}円 多いです（金券のおつりは出ません）`;
+  else if(c.due>0&&recv<c.due&&recv>0) m=`あと ${yen(c.due-recv)}円 足りません`;
+  $("msg").textContent=m;$("msg").hidden=!m;
+  const ok=c.total>0&&(c.due===0||recv>=c.due)&&!c.extra;
+  $("checkout").disabled=!ok;
+  const qs=[["ぴったり",c.due,"exact"],["1000",1000],["5000",5000],["10000",10000],["+100",100,"add"],["+500",500,"add"],["クリア",0,"clear"]];
+  $("quick").innerHTML=qs.map(([l,v,k])=>`<button class="qb ${k==="exact"?"exact":k==="clear"?"clear":""}" data-q="${v}" data-k="${k||"set"}">${l}</button>`).join("");
+}
+function render(){renderProducts();renderPanel()}
+
+document.addEventListener("click",e=>{
+  const b=e.target.closest("button");if(!b)return;
+  if(b.dataset.add!==undefined){order[b.dataset.add]++;render()}
+  else if(b.dataset.sub!==undefined){const i=b.dataset.sub;if(order[i]>0)order[i]--;render()}
+  else if(b.dataset.tp){tickets[b.dataset.tp]++;renderPanel()}
+  else if(b.dataset.tm){const v=b.dataset.tm;if(tickets[v]>0)tickets[v]--;renderPanel()}
+  else if(b.dataset.q!==undefined){const v=+b.dataset.q,k=b.dataset.k;recv=k==="add"?recv+v:k==="clear"?0:v;renderPanel()}
+  else if(b.dataset.view){document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected",t===b));
+    ["pos","sum","set"].forEach(v=>$("v-"+v).hidden=v!==b.dataset.view);
+    if(b.dataset.view==="sum")renderSum();if(b.dataset.view==="set")renderEditor();}
+});
+$("clearorder").onclick=()=>{order=order.map(()=>0);tickets=emptyT();recv=0;render()};
+$("checkout").onclick=()=>{
+  const c=calc();
+  S.sales.push({t:Date.now(),items:S.products.map((p,i)=>({name:p.name,price:p.price,q:order[i]})).filter(x=>x.q>0),
+    total:c.total,tickets:{...tickets},cash:c.due,recv:c.due?recv:0});
+  save();toast(c.change>0?`確定しました・おつり ${yen(c.change)}円`:"確定しました");
+  order=order.map(()=>0);tickets=emptyT();recv=0;render();
+};
+const tcount=(sales,v)=>sales.reduce((a,x)=>a+(x.tickets[v]||0),0);
+const tlabel=t=>TICKETS.filter(v=>t[v]).map(v=>`${v}×${t[v]}`).join(" ")||"—";
+
+function fmtTime(t){const d=new Date(t);return d.toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}
+function renderSum(){
+  const s=S.sales,tot=s.reduce((a,x)=>a+x.total,0),cash=s.reduce((a,x)=>a+x.cash,0);
+  $("s-total").textContent=yen(tot);$("s-cash").textContent=yen(cash);
+  $("s-tix").textContent=TICKETS.map(v=>`${v}円×${tcount(s,v)}`).join("　");$("s-count").textContent=s.length+"件";
+  const per={};s.forEach(x=>x.items.forEach(it=>{per[it.name]=per[it.name]||{q:0,a:0};per[it.name].q+=it.q;per[it.name].a+=it.q*it.price}));
+  $("s-items").innerHTML=`<tr><th>商品</th><th class="n">数量</th><th class="n">金額</th></tr>`+
+    (Object.keys(per).length?Object.entries(per).map(([n,v])=>`<tr><td>${esc(n)}</td><td class="n">${v.q}</td><td class="n">${yen(v.a)}円</td></tr>`).join(""):`<tr><td colspan="3" class="note">まだ会計がありません。会計タブで商品を選んで確定すると、ここに集計されます。</td></tr>`);
+  $("s-hist").innerHTML=`<tr><th>時刻</th><th>内容</th><th class="n">合計</th><th class="n">金券</th><th class="n">現金</th></tr>`+
+    s.slice().reverse().map(x=>`<tr><td>${fmtTime(x.t)}</td><td>${x.items.map(i=>esc(i.name)+"×"+i.q).join("、")}</td><td class="n">${yen(x.total)}</td><td class="n">${tlabel(x.tickets)}</td><td class="n">${yen(x.cash)}</td></tr>`).join("");
+  $("undo").disabled=!s.length;
+  $("csv").value=buildCSV();
+}
+function buildCSV(){
+  const q=v=>/[",\n]/.test(v)?`"${String(v).replace(/"/g,'""')}"`:v;
+  const L=["日時,商品,数量,単価,小計,会計合計,"+TICKETS.map(v=>v+"円券").join(",")+",現金売上"];
+  S.sales.forEach(x=>{const d=new Date(x.t).toLocaleString("ja-JP");x.items.forEach((it,k)=>L.push([d,q(it.name),it.q,it.price,it.q*it.price,k?"":x.total,...TICKETS.map(v=>k?"":(x.tickets[v]||0)),k?"":x.cash].join(",")))});
+  const tot=S.sales.reduce((a,x)=>a+x.total,0),cash=S.sales.reduce((a,x)=>a+x.cash,0);
+  L.push("",`売上合計,${tot}`,`現金売上,${cash}`,...TICKETS.map(v=>`${v}円券,${tcount(S.sales,v)}枚`),`金券額面合計,${TICKETS.reduce((a,v)=>a+v*tcount(S.sales,v),0)}`);
+  return L.join("\n");
+}
+$("undo").onclick=()=>{if(!S.sales.length)return;S.sales.pop();save();renderSum();toast("最後の会計を取り消しました")};
+$("dl").onclick=()=>{
+  try{const blob=new Blob(["﻿"+buildCSV()],{type:"text/csv"}),a=document.createElement("a"),d=new Date();
+    a.href=URL.createObjectURL(blob);a.download=`売上_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}.csv`;
+    document.body.appendChild(a);a.click();a.remove();toast("保存を開始しました");}
+  catch(e){toast("保存できない環境です。コピーを使ってください")}
+};
+$("copy").onclick=()=>{const t=$("csv");
+  navigator.clipboard?.writeText(t.value).then(()=>toast("コピーしました")).catch(()=>{t.select();toast("選択しました。長押しでコピーしてください")})
+  ?? (t.select(),toast("選択しました。長押しでコピーしてください"));};
+
+function renderEditor(){
+  $("editor").innerHTML=S.products.map((p,i)=>`<div class="field">
+    <input type="text" id="pn${i}" value="${esc(p.name)}" aria-label="商品${i+1}の名前">
+    <input type="number" id="pp${i}" value="${p.price}" min="0" step="10" inputmode="numeric" aria-label="商品${i+1}の値段">
+  </div>`).join("");
+}
+$("saveprod").onclick=()=>{
+  S.products=S.products.map((p,i)=>({name:$("pn"+i).value.trim()||p.name,price:Math.max(0,Math.round(+$("pp"+i).value||0))}));
+  save();order=S.products.map(()=>0);render();toast("商品を保存しました");
+};
+function restoreReset(){$("resetwrap").innerHTML=`<button class="ghost danger" id="reset">売上データを消去</button>`;bindReset()}
+function bindReset(){$("reset").onclick=()=>{
+  $("resetwrap").innerHTML=`<span class="note">本当に消去しますか？</span><button class="ghost danger" id="yes">消去する</button><button class="ghost" id="no">やめる</button>`;
+  $("yes").onclick=()=>{S.sales=[];save();restoreReset();toast("売上データを消去しました")};
+  $("no").onclick=restoreReset;}}
+bindReset();
+render();
+if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}))}
+try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
+</script>
+</body>
+</html>
